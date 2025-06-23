@@ -1,0 +1,38 @@
+{
+  "name": "Telegram Username Generator Bot",
+  "description": "A Telegram bot that generates rare usernames with crypto monetization",
+  "repository": "https://github.com/yourusername/telegram-username-bot",
+  "logo": "https://telegram.org/img/t_logo.png",
+  "keywords": ["telegram", "bot", "username", "generator", "crypto"],
+  "image": "heroku/python",
+  "env": {
+    "DATABASE_URL": {
+      "description": "PostgreSQL database URL",
+      "required": true
+    },
+    "SESSION_SECRET": {
+      "description": "Flask session secret key",
+      "generator": "secret"
+    },
+    "TELEGRAM_BOT_TOKEN": {
+      "description": "Telegram Bot API token",
+      "value": "7846959922:AAHtfU7tjgtaRnf1qogfsaxoy15_-UO_P4g"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  },
+  "addons": [
+    {
+      "plan": "heroku-postgresql:mini"
+    }
+  ],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ]
+}
