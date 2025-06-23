@@ -4,12 +4,6 @@ import requests
 import threading
 import time
 from flask import Flask, jsonify
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import DeclarativeBase
-from datetime import datetime, timezone
-
-class Base(DeclarativeBase):
-    pass
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -17,31 +11,6 @@ logger = logging.getLogger(__name__)
 
 # Create Flask app
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET", "telegram-bot-secret")
-
-# Database setup with error handling
-database_url = os.environ.get("DATABASE_URL")
-if database_url and database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql://", 1)
-
-app.config["SQLALCHEMY_DATABASE_URI"] = database_url or "sqlite:///bot.db"
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_recycle": 300,
-    "pool_pre_ping": True,
-}
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
-db = SQLAlchemy(model_class=Base)
-db.init_app(app)
-
-# Define models inline to avoid import issues
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    telegram_id = db.Column(db.BigInteger, unique=True, nullable=False)
-    username = db.Column(db.String(64), nullable=True)
-    first_name = db.Column(db.String(128), nullable=True)
-    subscription_tier = db.Column(db.String(20), default='free')
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 # Bot configuration
 BOT_TOKEN = "7846959922:AAHtfU7tjgtaRnf1qogfsaxoy15_-UO_P4g"
@@ -62,6 +31,8 @@ def send_message(chat_id, text):
 def handle_message(chat_id, text, user_data):
     user_id = user_data.get('id')
     username = user_data.get('username', 'Unknown')
+    
+    logger.info(f"Message from @{username}: {text}")
     
     if text.startswith('/start'):
         send_message(chat_id, '''🎯 <b>Welcome to Rare Username Generator!</b>
@@ -109,7 +80,12 @@ def handle_message(chat_id, text, user_data):
 <b>Payment Addresses:</b>
 BTC: <code>bc1qygedkhjxaw0dfx85x232rdxdamp9hczac5fpc3</code>
 LTC: <code>ltc1q5da462tgrmsdjt95n8lj66hwrdllrma8h0lnaa</code>
-ETH/USDT: <code>0x020b47D9a3782B034ec8e8fa216B827aB253e3c3</code>''')
+ETH/USDT: <code>0x020b47D9a3782B034ec8e8fa216B827aB253e3c3</code>
+
+<b>Instructions:</b>
+1. Send exact amount to appropriate address
+2. Forward transaction hash to this bot
+3. Subscription activates within 24 hours''')
         
     elif text.startswith('/help'):
         send_message(chat_id, '''🤖 <b>Available Commands:</b>
@@ -120,18 +96,33 @@ ETH/USDT: <code>0x020b47D9a3782B034ec8e8fa216B827aB253e3c3</code>''')
 /help - Show this help message''')
         
     elif text.startswith('/admin_stats') and user_id == 7481885595:
-        try:
-            total_users = User.query.count()
-            send_message(chat_id, f'📊 <b>Bot Statistics</b>\n\nTotal users: {total_users}')
-        except:
-            send_message(chat_id, '📊 <b>Bot Statistics</b>\n\nDatabase temporarily unavailable')
+        send_message(chat_id, '''📊 <b>Bot Statistics</b>
+
+👥 <b>Status:</b> Running on Heroku
+🤖 <b>Bot:</b> @UsernameavailablesBot
+💰 <b>Payments:</b> BTC, LTC, ETH, USDT accepted''')
     
     else:
         send_message(chat_id, 'Please use a command. Type /help for available commands.')
 
 def run_telegram_polling():
     logger.info("Starting Telegram bot polling...")
+    
+    # Test bot connection
+    try:
+        response = requests.get(f'{BASE_URL}/getMe', timeout=10)
+        if response.status_code == 200:
+            bot_info = response.json()
+            logger.info(f"Bot connected: @{bot_info['result']['username']}")
+        else:
+            logger.error(f"Bot connection failed: {response.status_code}")
+            return
+    except Exception as e:
+        logger.error(f"Bot connection error: {e}")
+        return
+    
     offset = 0
+    logger.info("Bot listening for messages...")
     
     while True:
         try:
@@ -174,19 +165,11 @@ def start_bot():
     try:
         bot_thread = threading.Thread(target=run_telegram_polling, daemon=True)
         bot_thread.start()
-        logger.info("Telegram bot started in background thread")
+        logger.info("Telegram bot started successfully")
     except Exception as e:
-        logger.error(f"Failed to start bot thread: {e}")
+        logger.error(f"Failed to start bot: {e}")
 
-# Initialize database
-try:
-    with app.app_context():
-        db.create_all()
-        logger.info("Database tables created successfully")
-except Exception as e:
-    logger.error(f"Database initialization error: {e}")
-
-# Start bot
+# Start bot immediately
 start_bot()
 
 @app.route('/')
@@ -201,11 +184,20 @@ def index():
         <li>Crypto-only subscriptions (BTC, LTC, ETH, USDT)</li>
         <li>Premium ($9.99/month) and VIP ($29.99/month) tiers</li>
     </ul>
+    <p><a href="/health">Health Check</a></p>
     '''
 
 @app.route('/health')
 def health():
-    return jsonify({"status": "healthy", "bot": "running"})
+    return jsonify({
+        "status": "healthy",
+        "bot": "running",
+        "service": "telegram-username-generator"
+    })
+
+@app.route('/test')
+def test():
+    return "Bot is working! ✅"
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
